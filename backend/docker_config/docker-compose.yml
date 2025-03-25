@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  # Node.js backend service
+  backend:
+    build:
+      context: ..
+      dockerfile: ./docker_config/Dockerfile.backend
+    container_name: tacitus-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../data:/app/data
+      - ../:/app
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongo:27017/tacitus
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    networks:
+      - tacitus-network
+
+  # MongoDB database service
+  mongo:
+    image: mongo:4.4
+    container_name: tacitus-mongo
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - tacitus-network
+    restart: unless-stopped
+
+networks:
+  tacitus-network:
+    driver: bridge
+
+volumes:
+  mongo-data: 
