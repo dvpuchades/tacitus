@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import axios from 'axios';
 
 // Change this to your Raspberry Pi's IP and port
-const API_URL = 'http://192.168.1.100:3000';
+const API_URL = 'http://178.237.236.101:3000';
 
 export default function App() {
   const [isListening, setIsListening] = useState(false);
@@ -14,6 +14,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -24,8 +25,23 @@ export default function App() {
         const currentLocation = await Location.getCurrentPositionAsync({});
         setLocation(currentLocation);
       }
+      
+      // Check connection to server
+      checkServerConnection();
     })();
   }, []);
+  
+  const checkServerConnection = async () => {
+    try {
+      await axios.get(`${API_URL}/api/health`);
+      setIsConnected(true);
+    } catch (error) {
+      console.error('Server connection error:', error);
+      setIsConnected(false);
+      // Try again in 10 seconds
+      setTimeout(checkServerConnection, 10000);
+    }
+  };
 
   const startListening = async () => {
     setIsListening(true);
@@ -93,7 +109,10 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Tacitus LLM Assistant</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Tacitus</Text>
+        <View style={[styles.connectionIndicator, isConnected ? styles.connected : styles.disconnected]} />
+      </View>
       
       {/* Location Status */}
       <Text style={styles.locationStatus}>
@@ -150,11 +169,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    position: 'relative',
+    marginBottom: 20,
+    marginTop: 50,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
-    marginTop: 50,
+  },
+  connectionIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    marginTop: -6,
+  },
+  connected: {
+    backgroundColor: '#34C759', // iOS green
+  },
+  disconnected: {
+    backgroundColor: '#FF3B30', // iOS red
   },
   locationStatus: {
     fontSize: 14,

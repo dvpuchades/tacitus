@@ -51,7 +51,7 @@ A mobile application that interacts with a Raspberry Pi-hosted large language mo
 4. Start the Docker containers:
    ```
    cd backend/docker_config
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Populate the Database

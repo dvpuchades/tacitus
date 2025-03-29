@@ -44,8 +44,7 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-location",
-      "expo-speech"
+      "expo-location"
     ],
     "experiments": {
       "typedRoutes": true

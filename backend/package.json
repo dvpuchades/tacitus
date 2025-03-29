@@ -7,7 +7,7 @@
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
     "docker:start": "./scripts/start.sh",
-    "docker:stop": "cd docker_config && docker-compose down",
+    "docker:stop": "cd docker_config && docker compose down",
     "scrape": "node scripts/scrapeWikipedia.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
