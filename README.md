@@ -7,13 +7,13 @@ A mobile application that interacts with a Raspberry Pi-hosted large language mo
 - **Mobile App**: React Native application using Expo
 - **Backend**: Node.js server with Express
 - **Database**: MongoDB and SQLite
-- **LLM Integration**: Dockerized backend for running local LLM
+- **LLM Integration**: Ollama for running local LLMs on the Raspberry Pi
 
 ## Prerequisites
 
 - Node.js and npm
 - Expo CLI
-- Docker and Docker Compose
+- Ollama (for running the LLM)
 - Raspberry Pi (for hosting the backend)
 - Mobile device with Expo Go app
 
@@ -39,19 +39,38 @@ A mobile application that interacts with a Raspberry Pi-hosted large language mo
 
 ### Backend Setup (Raspberry Pi)
 
-1. Install Docker and Docker Compose on your Raspberry Pi.
-
-2. Copy the backend folder to your Raspberry Pi.
-
-3. Create the data directory:
+1. Install Ollama on your Raspberry Pi:
    ```
-   mkdir -p backend/data
+   curl -fsSL https://ollama.com/install.sh | sh
    ```
 
-4. Start the Docker containers:
+2. Pull the Mistral model:
    ```
-   cd backend/docker_config
-   docker compose up -d
+   ollama pull mistral
+   ```
+
+3. Copy the backend folder to your Raspberry Pi.
+
+4. Install backend dependencies:
+   ```
+   cd backend
+   npm install
+   ```
+
+5. Create the data directory:
+   ```
+   mkdir -p data
+   ```
+
+6. Update the `.env` file with your Ollama configuration:
+   ```
+   OLLAMA_API_URL=http://localhost:11434/api/chat
+   OLLAMA_MODEL=mistral
+   ```
+
+7. Start the backend server:
+   ```
+   npm start
    ```
 
 ### Populate the Database
@@ -78,17 +97,30 @@ A mobile application that interacts with a Raspberry Pi-hosted large language mo
 - Text-to-speech responses
 - GPS coordinate integration
 - Location-based Wikipedia article retrieval
-- Dockerized backend for easy deployment
+- Ollama integration for running LLMs locally
+- Support for multiple LLM models through Ollama
 
 ## Technical Details
 
-- The backend connects to an LLM to process user queries.
+- The backend connects to Ollama to process user queries with a local LLM.
 - Location data is stored in SQLite with coordinates and Wikipedia article links.
 - MongoDB is used for additional data storage.
-- Docker containers ensure easy deployment on the Raspberry Pi.
+- Ollama runs the LLM locally on the Raspberry Pi, providing privacy and offline capabilities.
+
+## Using Ollama
+
+Ollama makes it easy to run various LLMs locally on your device. See the [detailed Ollama setup guide](backend/README_OLLAMA.md) for more information on:
+
+- Installing and configuring Ollama
+- Managing different LLM models
+- Performance optimization for Raspberry Pi
+- Troubleshooting common issues
+
+For more information, visit [the Ollama website](https://ollama.com/).
 
 ## Troubleshooting
 
-- If the app cannot connect to the backend, verify the Raspberry Pi's IP address and ensure the Docker containers are running.
+- If the app cannot connect to the backend, verify the Raspberry Pi's IP address and ensure the server is running.
 - Check the Raspberry Pi's firewall settings to ensure port 3000 is accessible.
+- For Ollama issues, verify that Ollama is running with `ps aux | grep ollama` and that the model is downloaded with `ollama list`.
 - For database issues, verify that the data directory has correct permissions.

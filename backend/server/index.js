@@ -14,6 +14,15 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// API key check middleware for protected routes
+const apiKeyCheck = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Server is running' });
@@ -49,19 +58,113 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Mock LLM function - in a real app, this would connect to an actual LLM
+// Real LLM function implementation using Ollama
 async function queryLLM(text, context) {
   console.log(`[LLM Query] Text: ${text}, Context: ${JSON.stringify(context)}`);
   
-  // In a real implementation, you would send this to your LLM
-  // For now, we'll return a mock response
-  return {
-    answer: `This is a simulated response about ${context.location || 'this location'}.
-    In a real implementation, the LLM would process your question "${text}" 
-    with the Wikipedia articles retrieved for coordinates near 
-    ${context.latitude}, ${context.longitude}.`
-  };
+  try {
+    // Prepare context from Wikipedia articles
+    let articleContents = '';
+    if (context.articles && context.articles.length > 0) {
+      articleContents = `Available articles about ${context.location}: ${context.articles.join(', ')}`;
+    }
+
+    // Ollama API endpoint - default for local installation
+    const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api/chat';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'mistral';
+    
+    // Call Ollama API
+    const response = await axios.post(
+      OLLAMA_API_URL,
+      {
+        model: OLLAMA_MODEL,
+        messages: [
+          { 
+            role: 'system', 
+            content: `You are a helpful assistant providing information about locations. 
+                      You have access to the following Wikipedia articles: ${articleContents}`
+          },
+          { 
+            role: 'user', 
+            content: `${text}. I'm currently at coordinates (${context.latitude}, ${context.longitude}), 
+                      which is in or near ${context.location}.`
+          }
+        ],
+        options: {
+          temperature: 0.7
+        }
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        // Add a longer timeout since local LLM might be slower
+        timeout: 60000
+      }
+    );
+
+    return {
+      answer: response.data.message?.content || 
+              "I couldn't generate a proper response. Please check if Ollama is running correctly."
+    };
+  } catch (error) {
+    console.error('Error calling Ollama LLM:', error.response?.data || error.message);
+    return {
+      answer: `I apologize, but I encountered an error processing your request. 
+              Please check if Ollama is running correctly on your Raspberry Pi.
+              (Technical details: ${error.message})`
+    };
+  }
 }
+
+// API endpoint to list all stored locations
+app.get('/api/locations', (req, res) => {
+  try {
+    db.all('SELECT id, latitude, longitude, location_name, created_at FROM locations ORDER BY created_at DESC', [], (err, rows) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      res.json({
+        success: true,
+        locations: rows || []
+      });
+    });
+  } catch (error) {
+    console.error('Error fetching locations:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// API endpoint to get details of a specific location
+app.get('/api/locations/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    db.get('SELECT * FROM locations WHERE id = ?', [id], (err, row) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+      
+      // Parse articles from JSON string
+      row.articles = JSON.parse(row.articles);
+      
+      res.json({
+        success: true,
+        location: row
+      });
+    });
+  } catch (error) {
+    console.error('Error fetching location details:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // API endpoint to process queries
 app.post('/api/query', async (req, res) => {
@@ -125,32 +228,60 @@ app.post('/api/search-location', async (req, res) => {
       return res.status(400).json({ error: 'Location is required' });
     }
     
-    // In a real implementation, you would:
-    // 1. Get coordinates for the location using a geocoding API
-    // 2. Fetch Wikipedia articles about the location
-    // 3. Store the data in the database
+    // Get coordinates for the location using a geocoding API
+    let coordinates;
+    try {
+      // Using OpenStreetMap Nominatim API (free, no key required)
+      const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
+      const geocodeResponse = await axios.get(geocodeUrl, {
+        headers: { 'User-Agent': 'Tacitus-App' } // Required by Nominatim
+      });
+      
+      if (geocodeResponse.data && geocodeResponse.data.length > 0) {
+        coordinates = {
+          latitude: parseFloat(geocodeResponse.data[0].lat),
+          longitude: parseFloat(geocodeResponse.data[0].lon)
+        };
+      } else {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      return res.status(500).json({ error: 'Error getting coordinates for this location' });
+    }
     
-    // Mock implementation for demo purposes
-    const mockCoordinates = {
-      latitude: 48.8566, // Paris coordinates as an example
-      longitude: 2.3522
-    };
-    
-    const mockArticles = [
-      'https://en.wikipedia.org/wiki/Paris',
-      'https://en.wikipedia.org/wiki/History_of_Paris',
-      'https://en.wikipedia.org/wiki/Culture_of_Paris'
-    ];
+    // Fetch Wikipedia articles about the location
+    let articles = [];
+    try {
+      // Using Wikipedia API to get articles near the coordinates
+      const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gsradius=10000&gscoord=${coordinates.latitude}|${coordinates.longitude}&gslimit=10&format=json`;
+      const wikiResponse = await axios.get(wikiUrl);
+      
+      if (wikiResponse.data && wikiResponse.data.query && wikiResponse.data.query.geosearch) {
+        articles = wikiResponse.data.query.geosearch.map(item => 
+          `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`
+        );
+      }
+      
+      // If no Wikipedia articles found, add a generic article about the location
+      if (articles.length === 0) {
+        articles.push(`https://en.wikipedia.org/wiki/${encodeURIComponent(location)}`);
+      }
+    } catch (error) {
+      console.error('Wikipedia API error:', error);
+      // If error, still proceed with a generic article
+      articles = [`https://en.wikipedia.org/wiki/${encodeURIComponent(location)}`];
+    }
     
     // Store in database
     db.run(
       `INSERT INTO locations (latitude, longitude, location_name, articles) 
        VALUES (?, ?, ?, ?)`,
       [
-        mockCoordinates.latitude, 
-        mockCoordinates.longitude, 
+        coordinates.latitude, 
+        coordinates.longitude, 
         location, 
-        JSON.stringify(mockArticles)
+        JSON.stringify(articles)
       ],
       function(err) {
         if (err) {
@@ -161,7 +292,14 @@ app.post('/api/search-location', async (req, res) => {
         console.log(`Location data for "${location}" stored with ID: ${this.lastID}`);
         res.json({ 
           success: true, 
-          message: `Location data for "${location}" has been processed and stored` 
+          message: `Location data for "${location}" has been processed and stored`,
+          location: {
+            id: this.lastID,
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
+            location_name: location,
+            articles: articles
+          }
         });
       }
     );
