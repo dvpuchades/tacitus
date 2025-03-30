@@ -34,9 +34,21 @@ services:
       - tacitus-network
     restart: unless-stopped
 
+  # Ollama service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tacitus-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/data  # Adjust the volume mount as needed
+    restart: unless-stopped
+    networks:
+      - tacitus-network
+
 networks:
   tacitus-network:
     driver: bridge
 
 volumes:
-  mongo-data: 
+  mongo-data:

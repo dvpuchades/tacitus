@@ -90,7 +90,6 @@ A mobile application that interacts with a Raspberry Pi-hosted large language mo
 3. Press the "Press to Speak" button to ask questions about your current location.
 
 4. Use the location search field to add data for specific cities or countries.
-
 ## Features
 
 - Voice input for queries
@@ -124,3 +123,4 @@ For more information, visit [the Ollama website](https://ollama.com/).
 - Check the Raspberry Pi's firewall settings to ensure port 3000 is accessible.
 - For Ollama issues, verify that Ollama is running with `ps aux | grep ollama` and that the model is downloaded with `ollama list`.
 - For database issues, verify that the data directory has correct permissions.
+
